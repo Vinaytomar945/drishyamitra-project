@@ -96,7 +96,9 @@ def upload_photo():
         photo = Photo(
             filename=file.filename,
             person_name="Unknown",
-            path=file_path
+            path=file_path,
+            age=age,
+            gender=gender
         )
 
         db.session.add(photo)
@@ -105,7 +107,8 @@ def upload_photo():
         return jsonify({
             "message": "Uploaded successfully",
             "age": age,
-            "gender": gender
+            "gender": gender,
+            "image_url": f"/uploads/{file.filename}"   # ✅ Added image URL
         })
 
     except Exception as e:
@@ -121,7 +124,9 @@ def get_photos():
             "id": photo.id,
             "filename": photo.filename,
             "person_name": photo.person_name,
-            "path": photo.path
+            "path": photo.path,
+            "age": photo.age,
+            "gender": photo.gender
         })
 
     return jsonify(result)
