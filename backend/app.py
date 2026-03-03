@@ -1,58 +1,135 @@
 import os
+import json
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from dotenv import load_dotenv
+from deepface import DeepFace
+
 from database import db
 from models import Photo
-from face_service import analyze_face
-from chat_service import chat_with_ai
 
-UPLOAD_FOLDER = "uploads"
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
 
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///instance/drishyamitra.db"
+# =============================
+# CONFIGURATION
+# =============================
+
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
+    "DATABASE_URL",
+    "sqlite:///" + os.path.join(BASE_DIR, "drishyamitra.db")
+)
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["UPLOAD_FOLDER"] = os.path.join(BASE_DIR, "uploads")
+
+# Ensure upload folder exists
+os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
 db.init_app(app)
-
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 with app.app_context():
     db.create_all()
 
+# =============================
+# HELPER FUNCTION
+# =============================
+
+def convert_numpy(obj):
+    """
+    Recursively convert numpy types to Python native types
+    so Flask can jsonify them.
+    """
+    if hasattr(obj, "item"):
+        return obj.item()
+    if isinstance(obj, dict):
+        return {k: convert_numpy(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [convert_numpy(i) for i in obj]
+    return obj
+
+# =============================
+# ROUTES
+# =============================
+
 @app.route("/")
 def home():
-    return {"message": "Backend running successfully"}
+    return jsonify({"message": "Backend running successfully"})
 
 @app.route("/upload", methods=["POST"])
 def upload_photo():
-    file = request.files["photo"]
+    try:
+        if "photo" not in request.files:
+            return jsonify({"error": "No file provided"}), 400
 
-    path = os.path.join(UPLOAD_FOLDER, file.filename)
-    file.save(path)
+        file = request.files["photo"]
 
-    analysis = analyze_face(path)
+        if file.filename == "":
+            return jsonify({"error": "Empty filename"}), 400
 
-    photo = Photo(filename=file.filename, person_name="Unknown", path=path)
-    db.session.add(photo)
-    db.session.commit()
+        # Save file
+        file_path = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
+        file.save(file_path)
 
-    return jsonify({
-        "message": "Uploaded",
-        "analysis": analysis
-    })
+        # Analyze face
+        analysis = DeepFace.analyze(
+            img_path=file_path,
+            actions=["age", "gender"],
+            enforce_detection=False
+        )
+
+        # DeepFace sometimes returns list
+        if isinstance(analysis, list):
+            analysis = analysis[0]
+
+        # Convert numpy values
+        analysis = convert_numpy(analysis)
+
+        age = analysis.get("age")
+        gender = analysis.get("dominant_gender")
+
+        # Save to DB
+        photo = Photo(
+            filename=file.filename,
+            person_name="Unknown",
+            path=file_path
+        )
+
+        db.session.add(photo)
+        db.session.commit()
+
+        return jsonify({
+            "message": "Uploaded successfully",
+            "age": age,
+            "gender": gender
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@app.route("/photos", methods=["GET"])
+def get_photos():
+    photos = Photo.query.all()
+
+    result = []
+    for photo in photos:
+        result.append({
+            "id": photo.id,
+            "filename": photo.filename,
+            "person_name": photo.person_name,
+            "path": photo.path
+        })
+
+    return jsonify(result)
 
 
-@app.route("/chat", methods=["POST"])
-def chat():
-    data = request.json
-    msg = data.get("message")
-
-    reply = chat_with_ai(msg)
-
-    return {"response": reply}
-
+# =============================
+# START SERVER
+# =============================
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
