@@ -1,15 +1,27 @@
 import os
 import json
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
+from flask_jwt_extended import JWTManager   # ✅ JWT import
 from deepface import DeepFace
+from werkzeug.utils import secure_filename
+from PIL import Image   # ✅ Pillow import
 
 from database import db
-from models import Photo
+from models import User, Photo, Face
+from auth_routes import auth_bp             # ✅ Auth blueprint
+from photo_routes import photo_bp           # ✅ Photo blueprint
+from face_routes import face_bp
+from chat_routes import chat_bp
+# =============================
+# LOAD ENVIRONMENT VARIABLES
+# =============================
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+ROOT_DIR = os.path.dirname(BASE_DIR)
 
-# Load environment variables
-load_dotenv()
+# Explicitly load .env from project root
+load_dotenv(os.path.join(ROOT_DIR, ".env"))
 
 app = Flask(__name__)
 CORS(app)
@@ -17,20 +29,19 @@ CORS(app)
 # =============================
 # CONFIGURATION
 # =============================
-
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-
 app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
     "DATABASE_URL",
     "sqlite:///" + os.path.join(BASE_DIR, "drishyamitra.db")
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["UPLOAD_FOLDER"] = os.path.join(BASE_DIR, "uploads")
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "super-secret")  # ✅ JWT secret
 
 # Ensure upload folder exists
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
 db.init_app(app)
+jwt = JWTManager(app)   # ✅ JWT setup
 
 with app.app_context():
     db.create_all()
@@ -38,12 +49,7 @@ with app.app_context():
 # =============================
 # HELPER FUNCTION
 # =============================
-
 def convert_numpy(obj):
-    """
-    Recursively convert numpy types to Python native types
-    so Flask can jsonify them.
-    """
     if hasattr(obj, "item"):
         return obj.item()
     if isinstance(obj, dict):
@@ -55,10 +61,13 @@ def convert_numpy(obj):
 # =============================
 # ROUTES
 # =============================
-
 @app.route("/")
 def home():
     return jsonify({"message": "Backend running successfully"})
+
+@app.route("/uploads/<filename>")
+def uploaded_file(filename):
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
 @app.route("/upload", methods=["POST"])
 def upload_photo():
@@ -71,30 +80,41 @@ def upload_photo():
         if file.filename == "":
             return jsonify({"error": "Empty filename"}), 400
 
-        # Save file
-        file_path = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
+        filename = secure_filename(os.path.basename(file.filename))
+        file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
         file.save(file_path)
 
-        # Analyze face
+        if not os.path.exists(file_path):
+            return jsonify({"error": "File not saved correctly"}), 500
+
+        # ✅ Normalize path for DeepFace
+        file_path = file_path.replace("\\", "/")
+
+        # ✅ Sanity check with Pillow
+        try:
+            img = Image.open(file_path)
+            img.verify()
+        except Exception as e:
+            return jsonify({"error": f"Image could not be read by Pillow: {str(e)}"}), 500
+
+        # ✅ DeepFace analyze
         analysis = DeepFace.analyze(
             img_path=file_path,
             actions=["age", "gender"],
-            enforce_detection=False
+            enforce_detection=False,
+            detector_backend="retinaface"
         )
 
-        # DeepFace sometimes returns list
         if isinstance(analysis, list):
             analysis = analysis[0]
 
-        # Convert numpy values
         analysis = convert_numpy(analysis)
 
         age = analysis.get("age")
         gender = analysis.get("dominant_gender")
 
-        # Save to DB
         photo = Photo(
-            filename=file.filename,
+            filename=filename,
             person_name="Unknown",
             path=file_path,
             age=age,
@@ -108,7 +128,7 @@ def upload_photo():
             "message": "Uploaded successfully",
             "age": age,
             "gender": gender,
-            "image_url": f"/uploads/{file.filename}"   # ✅ Added image URL
+            "image_url": f"/uploads/{filename}"
         })
 
     except Exception as e:
@@ -117,7 +137,6 @@ def upload_photo():
 @app.route("/photos", methods=["GET"])
 def get_photos():
     photos = Photo.query.all()
-
     result = []
     for photo in photos:
         result.append({
@@ -128,13 +147,13 @@ def get_photos():
             "age": photo.age,
             "gender": photo.gender
         })
-
     return jsonify(result)
 
-
-# =============================
-# START SERVER
-# =============================
+# ✅ Register Blueprints (JWT + Modular routes)
+app.register_blueprint(auth_bp, url_prefix="/auth")
+app.register_blueprint(photo_bp, url_prefix="/photos")
+app.register_blueprint(face_bp, url_prefix="/face")
+app.register_blueprint(chat_bp, url_prefix="/chat")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
