@@ -9,7 +9,7 @@ from werkzeug.utils import secure_filename
 from PIL import Image   # ✅ Pillow import
 
 from database import db
-from models import User, Photo, Face
+from models import User, Photo, FaceEmbedding
 from auth_routes import auth_bp             # ✅ Auth blueprint
 from photo_routes import photo_bp           # ✅ Photo blueprint
 from face_routes import face_bp
@@ -150,8 +150,9 @@ def get_photos():
     return jsonify(result)
 
 # ✅ Register Blueprints (JWT + Modular routes)
+app.register_blueprint(photo_bp, url_prefix="/photo")
 app.register_blueprint(auth_bp, url_prefix="/auth")
-app.register_blueprint(photo_bp, url_prefix="/photos")
+# app.register_blueprint(photo_bp, url_prefix="/photos")
 app.register_blueprint(face_bp, url_prefix="/face")
 app.register_blueprint(chat_bp, url_prefix="/chat")
 
