@@ -44,7 +44,7 @@ app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "super-secret")  # �
 os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
 db.init_app(app)
-jwt = JWTManager(app)   # ✅ JWT setup
+jwt = JWTManager(app)   # JWT setup
 
 with app.app_context():
     db.create_all()
@@ -90,17 +90,17 @@ def upload_photo():
         if not os.path.exists(file_path):
             return jsonify({"error": "File not saved correctly"}), 500
 
-        # ✅ Normalize path for DeepFace
+        # Normalize path for DeepFace
         file_path = file_path.replace("\\", "/")
 
-        # ✅ Sanity check with Pillow
+        # Sanity check with Pillow
         try:
             img = Image.open(file_path)
             img.verify()
         except Exception as e:
             return jsonify({"error": f"Image could not be read by Pillow: {str(e)}"}), 500
 
-        # ✅ DeepFace analyze
+        # DeepFace analyze
         analysis = DeepFace.analyze(
             img_path=file_path,
             actions=["age", "gender"],
@@ -152,7 +152,7 @@ def get_photos():
         })
     return jsonify(result)
 
-# ✅ Register Blueprints (JWT + Modular routes)
+# Register Blueprints (JWT + Modular routes)
 app.register_blueprint(photo_bp, url_prefix="/photo")
 app.register_blueprint(auth_bp, url_prefix="/auth")
 # app.register_blueprint(photo_bp, url_prefix="/photos")
