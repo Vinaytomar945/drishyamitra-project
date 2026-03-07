@@ -14,6 +14,9 @@ from auth_routes import auth_bp             # ✅ Auth blueprint
 from photo_routes import photo_bp           # ✅ Photo blueprint
 from face_routes import face_bp
 from chat_routes import chat_bp
+from email_routes import email_bp
+from whatsapp_routes import whatsapp_bp
+
 # =============================
 # LOAD ENVIRONMENT VARIABLES
 # =============================
@@ -155,6 +158,8 @@ app.register_blueprint(auth_bp, url_prefix="/auth")
 # app.register_blueprint(photo_bp, url_prefix="/photos")
 app.register_blueprint(face_bp, url_prefix="/face")
 app.register_blueprint(chat_bp, url_prefix="/chat")
+app.register_blueprint(email_bp, url_prefix="/email")
+app.register_blueprint(whatsapp_bp, url_prefix="/whatsapp")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
