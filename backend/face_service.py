@@ -11,7 +11,7 @@ def analyze_face(image_path):
             img_path=image_path,
             actions=["age", "gender", "emotion"],
             enforce_detection=False,
-            detector_backend="retinaface"
+            detector_backend="opencv"
         )
 
         if isinstance(result, list):

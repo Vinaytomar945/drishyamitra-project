@@ -4,6 +4,7 @@ from database import db
 from face_service import analyze_face, get_face_embedding, find_matching_face
 import os, uuid, json
 from flask import send_from_directory
+from PIL import Image
 
 photo_bp = Blueprint("photo", __name__)
 
@@ -23,6 +24,9 @@ def upload_photo():
     path = f"{UPLOAD_FOLDER}/{filename}"
 
     file.save(path)
+    img = Image.open(path)
+    img = img.resize((640, 640))
+    img.save(path)
 
     # analyze face
     analysis = analyze_face(path)
