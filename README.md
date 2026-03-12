@@ -90,7 +90,7 @@ drishyamitra-project/
 ### 1️⃣ Clone the repository
 
 ```
-git clone https://github.com/your-username/drishyamitra-project.git
+git clone https://github.com/Vinaytomar945/drishyamitra-project
 cd drishyamitra-project
 ```
 
